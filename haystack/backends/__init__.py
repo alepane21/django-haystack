@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import inspect
 from copy import deepcopy
 from time import time
 from django.conf import settings
@@ -21,7 +22,6 @@ VALID_GAPS = ['year', 'month', 'day', 'hour', 'minute', 'second']
 
 # A means to inspect all search queries that have run in the last request.
 queries = []
-
 
 # Per-request, reset the ghetto query log.
 # Probably not extraordinarily thread-safe but should only matter when
@@ -55,6 +55,7 @@ def log_query(func):
                     'additional_args': args,
                     'additional_kwargs': kwargs,
                     'time': "%.3f" % (stop - start),
+                    'stacktrace': inspect.stack()
                 })
     
     return wrapper
