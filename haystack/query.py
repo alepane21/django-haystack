@@ -356,6 +356,12 @@ class SearchQuerySet(object):
         clone = self._clone()
         clone.query.set_facet_prefix(prefix)
         return clone
+
+    def facet_sort(self,sort):
+        """Sets order of facet result"""
+        clone = self._clone()
+        clone.query.set_facet_sort(sort)
+        return clone
     
     def narrow(self, query):
         """Pushes existing facet choices into the search."""

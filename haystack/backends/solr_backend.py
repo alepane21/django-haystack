@@ -99,8 +99,9 @@ class SearchBackend(BaseSearchBackend):
     @log_query
     def search(self, query_string, sort_by=None, start_offset=0, end_offset=None,
                fields='', highlight=False, facets=None, date_facets=None, query_facets=None,
-               narrow_queries=None, spelling_query=None, facet_mincount=None, facet_limit=None, facet_prefix=None,
-               limit_to_registered_models=None, result_class=None, **kwargs):
+               narrow_queries=None, spelling_query=None, facet_mincount=None, facet_limit=None,
+               facet_prefix=None, facet_sort=None, limit_to_registered_models=None,
+               result_class=None, **kwargs):
         if len(query_string) == 0:
             return {
                 'results': [],
@@ -150,6 +151,10 @@ class SearchBackend(BaseSearchBackend):
         if facet_prefix is not None:
             kwargs['facet'] = 'on'
             kwargs['facet.prefix'] = facet_prefix
+
+        if facet_sort is not None:
+            kwargs['facet'] = 'on'
+            kwargs['facet.sort'] = facet_sort
         
         if date_facets is not None:
             kwargs['facet'] = 'on'
@@ -475,6 +480,9 @@ class SearchQuery(BaseSearchQuery):
         
         if self.facet_prefix:
             kwargs['facet_prefix'] = self.facet_prefix
+
+        if self.facet_sort:
+            kwargs['facet_sort'] = self.facet_sort
         
         if self.query_facets:
             kwargs['query_facets'] = self.query_facets
