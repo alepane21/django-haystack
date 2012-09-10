@@ -775,4 +775,5 @@ class BaseSearchQuery(object):
         clone.result_class = self.result_class
         clone._raw_query = self._raw_query
         clone._raw_query_params = self._raw_query_params
+        clone._facet_counts = self._facet_counts
         return clone
