@@ -321,10 +321,10 @@ class SearchQuerySet(object):
         clone.query.add_boost(term, boost)
         return clone
     
-    def facet(self, field):
+    def facet(self, field, **kwargs):
         """Adds faceting to a query for the provided field."""
         clone = self._clone()
-        clone.query.add_field_facet(field)
+        clone.query.add_field_facet(field, **kwargs)
         return clone
     
     def date_facet(self, field, start_date, end_date, gap_by, gap_amount=1):
@@ -363,10 +363,10 @@ class SearchQuerySet(object):
         clone.query.set_facet_sort(sort)
         return clone
     
-    def narrow(self, query):
+    def narrow(self, query, **kwargs):
         """Pushes existing facet choices into the search."""
         clone = self._clone()
-        clone.query.add_narrow_query(query)
+        clone.query.add_narrow_query(query, **kwargs)
         return clone
     
     def raw_search(self, query_string, **kwargs):

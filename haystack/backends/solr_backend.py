@@ -466,9 +466,33 @@ class SearchQuery(BaseSearchQuery):
         
         if self.highlight:
             kwargs['highlight'] = self.highlight
-        
+
         if self.facets:
-            kwargs['facets'] = list(self.facets)
+            facets = []
+            for facet, key, ex in list(self.facets):
+                if not facet:
+                    continue
+                
+                f_mask = ''
+                tok = []
+                if key or ex:
+                    f_mask += '{!'
+                if key:
+                    f_mask += 'key=%s'
+                    tok.append(key)
+                if ex:
+                    if key:
+                        f_mask += ' ' 
+                    f_mask += 'ex=%s'
+                    tok.append(ex)
+                if key or ex:
+                    f_mask += '}'
+                f_mask += facet
+                if len(tok) > 0:
+                    facet = f_mask % tuple(tok)
+                facets.append(facet)
+
+            kwargs['facets'] = facets
         
         if self.date_facets:
             kwargs['date_facets'] = self.date_facets
@@ -489,7 +513,13 @@ class SearchQuery(BaseSearchQuery):
             kwargs['query_facets'] = self.query_facets
         
         if self.narrow_queries:
-            kwargs['narrow_queries'] = self.narrow_queries
+            narrow_queries = []
+            for query, tag in list(self.narrow_queries):
+                if query and tag:
+                    query = '{!tag=%s}' % tag + query
+                narrow_queries.append(query)
+
+            kwargs['narrow_queries'] = narrow_queries
         
         if spelling_query:
             kwargs['spelling_query'] = spelling_query
@@ -517,3 +547,16 @@ class SearchQuery(BaseSearchQuery):
         results = self.backend.more_like_this(self._mlt_instance, additional_query_string, **kwargs)
         self._results = results.get('results', [])
         self._hit_count = results.get('hits', 0)
+
+    def add_field_facet(self, field, key=None, ex=[]):
+        """Adds a regular facet on a field."""
+        facet_field = self.backend.site.get_facet_field_name(field)
+        self.facets.add((facet_field, key, ','.join(ex)))
+        
+    def add_narrow_query(self, query, tag=None):
+        """
+        Narrows a search to a subset of all documents per the query.
+        
+        Generally used in conjunction with faceting.
+        """
+        self.narrow_queries.add((query, tag))
