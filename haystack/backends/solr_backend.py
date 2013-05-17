@@ -41,11 +41,12 @@ class SearchBackend(BaseSearchBackend):
     def __init__(self, site=None):
         super(SearchBackend, self).__init__(site)
         
-        if not hasattr(settings, 'HAYSTACK_SOLR_URL'):
-            raise ImproperlyConfigured('You must specify a HAYSTACK_SOLR_URL in your settings.')
+        if not hasattr(settings, 'HAYSTACK_SOLR_URLS'):
+            raise ImproperlyConfigured('You must specify a HAYSTACK_SOLR_URLS in your settings.')
         
         timeout = getattr(settings, 'HAYSTACK_SOLR_TIMEOUT', 10)
-        self.conn = Solr(settings.HAYSTACK_SOLR_URL, timeout=timeout)
+        self.conn = Solr(settings.HAYSTACK_SOLR_URLS['MASTER'], timeout=timeout)
+        self.conn_slave = Solr(settings.HAYSTACK_SOLR_URLS['SLAVE'], timeout=timeout)
         self.log = logging.getLogger('haystack')
     
     def update(self, index, iterable, commit=True):
@@ -162,8 +163,8 @@ class SearchBackend(BaseSearchBackend):
             kwargs['facet.date.other'] = 'none'
             
             for key, value in date_facets.items():
-                kwargs["f.%s.facet.date.start" % key] = self.conn._from_python(value.get('start_date'))
-                kwargs["f.%s.facet.date.end" % key] = self.conn._from_python(value.get('end_date'))
+                kwargs["f.%s.facet.date.start" % key] = self.conn_slave._from_python(value.get('start_date'))
+                kwargs["f.%s.facet.date.end" % key] = self.conn_slave._from_python(value.get('end_date'))
                 gap_by_string = value.get('gap_by').upper()
                 gap_string = "%d%s" % (value.get('gap_amount'), gap_by_string)
                 
@@ -194,7 +195,7 @@ class SearchBackend(BaseSearchBackend):
             kwargs['fq'] = list(narrow_queries)
         
         try:
-            raw_results = self.conn.search(query_string, **kwargs)
+            raw_results = self.conn_slave.search(query_string, **kwargs)
         except (IOError, SolrError), e:
             self.log.error("Failed to query Solr using '%s': %s", query_string, e)
             raw_results = EmptyResults()
@@ -247,7 +248,7 @@ class SearchBackend(BaseSearchBackend):
         query = "%s:%s" % (ID, get_identifier(model_instance))
         
         try:
-            raw_results = self.conn.more_like_this(query, field_name, **params)
+            raw_results = self.conn_slave.more_like_this(query, field_name, **params)
         except (IOError, SolrError), e:
             self.log.error("Failed to fetch More Like This from Solr for document '%s': %s", query, e)
             raw_results = EmptyResults()
@@ -303,7 +304,7 @@ class SearchBackend(BaseSearchBackend):
                     if string_key in index.fields and hasattr(index.fields[string_key], 'convert'):
                         additional_fields[string_key] = index.fields[string_key].convert(value)
                     else:
-                        additional_fields[string_key] = self.conn._to_python(value)
+                        additional_fields[string_key] = self.conn_slave._to_python(value)
                 
                 for name in [DJANGO_CT, DJANGO_ID, 'score']:
                     if name in additional_fields:
@@ -403,7 +404,7 @@ class SearchQuery(BaseSearchQuery):
         
         if not isinstance(value, (list, tuple)):
             # Convert whatever we find to what pysolr wants.
-            value = self.backend.conn._from_python(value)
+            value = self.backend.conn_slave._from_python(value)
         
         # Check to see if it's a phrase for an exact match.
         if ' ' in value:
@@ -429,7 +430,7 @@ class SearchQuery(BaseSearchQuery):
                 in_options = []
                 
                 for possible_value in value:
-                    in_options.append('%s:"%s"' % (index_fieldname, self.backend.conn._from_python(possible_value)))
+                    in_options.append('%s:"%s"' % (index_fieldname, self.backend.conn_slave._from_python(possible_value)))
                 
                 result = "(%s)" % " OR ".join(in_options)
             elif filter_type == 'range':
