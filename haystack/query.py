@@ -375,6 +375,12 @@ class SearchQuerySet(object):
         clone.query.raw_search(query_string, **kwargs)
         return clone
     
+    def dismax(self, **kwargs):
+        """Sets dismax parameters for capable backends"""
+        clone = self._clone()
+        clone.query.add_dismax(**kwargs)
+        return clone
+    
     def load_all(self):
         """Efficiently populates the objects in the search results."""
         clone = self._clone()

@@ -281,6 +281,7 @@ class BaseSearchQuery(object):
         self.order_by = []
         self.models = set()
         self.boost = {}
+        self.dismax = {}
         self.start_offset = 0
         self.end_offset = None
         self.highlight = False
@@ -668,7 +669,15 @@ class BaseSearchQuery(object):
         """
         self._raw_query = query_string
         self._raw_query_params = kwargs
-    
+        
+    def add_dismax(self, **kwargs):
+        """
+        Allows backends with support for "dismax" to perform enhanced user query parsing
+        """
+        
+        self.dismax = dict([(p, v) for p, v in kwargs.iteritems()
+                            if p in getattr(self.backend, 'DISMAX_PARAMETERS', [])])
+        
     def more_like_this(self, model_instance):
         """
         Allows backends with support for "More Like This" to return results
@@ -760,6 +769,7 @@ class BaseSearchQuery(object):
         clone.order_by = self.order_by[:]
         clone.models = self.models.copy()
         clone.boost = self.boost.copy()
+        clone.dismax = self.dismax.copy()
         clone.highlight = self.highlight
         clone.facets = self.facets.copy()
         clone.date_facets = self.date_facets.copy()
