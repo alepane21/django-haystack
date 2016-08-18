@@ -318,9 +318,9 @@ class SearchBackend(BaseSearchBackend):
                 facet = []
                 for p in pivot:
                     if not 'pivot' in p:
-                        facet.append((str(p['value']), p['count'], ()))
+                        facet.append((unicode(p['value']), p['count'], ()))
                     else:
-                        facet.append((str(p['value']), p['count'], tuple(_process_pivot(p['pivot']))))
+                        facet.append((unicode(p['value']), p['count'], tuple(_process_pivot(p['pivot']))))
                 
                 return facet
                     
