@@ -123,7 +123,7 @@ class BaseSearchBackend(object):
     @log_query
     def search(self, query_string, sort_by=None, start_offset=0, end_offset=None,
                fields='', highlight=False, facets=None, date_facets=None, query_facets=None,
-               narrow_queries=None, spelling_query=None,
+               pivot_facets=None, narrow_queries=None, spelling_query=None,
                limit_to_registered_models=None, result_class=None, **kwargs):
         """
         Takes a query to search on and returns dictionary.
@@ -289,9 +289,12 @@ class BaseSearchQuery(object):
         self.date_facets = {}
         self.facet_mincount = None
         self.facet_limit = None
+        self.facet_field_limit = {}
         self.facet_prefix = None
         self.facet_sort = None
         self.query_facets = []
+        self.pivot_facets = set()
+        self.facet_pivot_mincount = None
         self.narrow_queries = set()
         self._raw_query = None
         self._raw_query_params = {}
@@ -360,18 +363,27 @@ class BaseSearchQuery(object):
         
         if self.query_facets:
             kwargs['query_facets'] = self.query_facets
+            
+        if self.pivot_facets:
+            kwargs['pivot_facets'] = list(self.pivot_facets)
         
         if self.facet_mincount:
             kwargs['facet_mincount'] = self.facet_mincount
         
         if self.facet_limit:
             kwargs['facet_limit'] = self.facet_limit
+            
+        if self.facet_field_limit:
+            kwargs['facet_field_limit'] = self.facet_field_limit
         
         if self.facet_prefix:
             kwargs['facet_prefix'] = self.facet_prefix
 
         if self.facet_sort:
             kwargs['facet_sort'] = self.facet_sort
+            
+        if self.facet_pivot_mincount:
+            kwargs['facet_pivot_mincount'] = self.facet_pivot_mincount
         
         if self.narrow_queries:
             kwargs['narrow_queries'] = self.narrow_queries
@@ -615,12 +627,19 @@ class BaseSearchQuery(object):
     
     def set_facet_limit(self, limit):
         self.facet_limit = limit
+        
+    def set_facet_field_limit(self, field, limit):
+        facet_field = self.backend.site.get_facet_field_name(field)
+        self.facet_field_limit[facet_field] = limit
     
     def set_facet_prefix(self, prefix):
         self.facet_prefix = prefix
 
     def set_facet_sort(self, sort):
         self.facet_sort = sort
+        
+    def set_facet_pivot_mincount(self, mincount):
+        self.facet_pivot_mincount = mincount
     
     def clear_order_by(self):
         """
@@ -710,6 +729,13 @@ class BaseSearchQuery(object):
     def add_query_facet(self, field, query):
         """Adds a query facet on a field."""
         self.query_facets.append((self.backend.site.get_facet_field_name(field), query))
+        
+    def add_pivot_facet(self, *args):
+        """Adds pivot faceting to a query for the provided fields."""
+        facet_fields = []
+        for field in args:
+            facet_fields.append(self.backend.site.get_facet_field_name(field))
+        self.pivot_facets.add((','.join(facet_fields)))
     
     def add_narrow_query(self, query):
         """
@@ -774,10 +800,13 @@ class BaseSearchQuery(object):
         clone.facets = self.facets.copy()
         clone.date_facets = self.date_facets.copy()
         clone.query_facets = self.query_facets[:]
+        clone.pivot_facets = self.pivot_facets.copy()
         clone.facet_mincount = self.facet_mincount
         clone.facet_limit = self.facet_limit
+        clone.facet_field_limit = self.facet_field_limit.copy()
         clone.facet_prefix = self.facet_prefix
         clone.facet_sort = self.facet_sort
+        clone.facet_pivot_mincount = self.facet_pivot_mincount
         clone.narrow_queries = self.narrow_queries.copy()
         clone.start_offset = self.start_offset
         clone.end_offset = self.end_offset

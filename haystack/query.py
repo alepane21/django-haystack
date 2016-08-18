@@ -338,17 +338,29 @@ class SearchQuerySet(object):
         clone = self._clone()
         clone.query.add_query_facet(field, query)
         return clone
+    
+    def pivot_facet(self, *args, **kwargs):
+        """Adds pivot faceting to a query for the provided fields."""
+        clone = self._clone()
+        clone.query.add_pivot_facet(*args, **kwargs)
+        return clone
         
-    def facet_mincount(self,mincount):
+    def facet_mincount(self, mincount):
         """Sets mincount for facet result"""
         clone = self._clone()
         clone.query.set_facet_mincount(mincount)
         return clone
         
-    def facet_limit(self,limit):
+    def facet_limit(self, limit):
         """Sets limit for facet result"""
         clone = self._clone()
         clone.query.set_facet_limit(limit)
+        return clone
+    
+    def facet_field_limit(self, field, limit):
+        """Sets limit for facet result on given field"""
+        clone = self._clone()
+        clone.query.set_facet_field_limit(field, limit)
         return clone
 
     def facet_prefix(self,prefix):
@@ -357,10 +369,16 @@ class SearchQuerySet(object):
         clone.query.set_facet_prefix(prefix)
         return clone
 
-    def facet_sort(self,sort):
+    def facet_sort(self, sort):
         """Sets order of facet result"""
         clone = self._clone()
         clone.query.set_facet_sort(sort)
+        return clone
+    
+    def facet_pivot_mincount(self, mincount):
+        """Sets mincount for pivot facet result"""
+        clone = self._clone()
+        clone.query.set_facet_mincount(mincount)
         return clone
     
     def narrow(self, query, **kwargs):

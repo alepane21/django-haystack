@@ -114,9 +114,10 @@ class SearchBackend(BaseSearchBackend):
     @log_query
     def search(self, query_string, sort_by=None, start_offset=0, end_offset=None,
                fields='', highlight=False, facets=None, date_facets=None, query_facets=None,
-               narrow_queries=None, spelling_query=None, facet_mincount=None, facet_limit=None,
-               facet_prefix=None, facet_sort=None, dismax=None, limit_to_registered_models=None,
-               result_class=None, **kwargs):
+               pivot_facets=None, narrow_queries=None, spelling_query=None, facet_mincount=None, facet_limit=None,
+               facet_field_limit=None, facet_prefix=None, facet_sort=None, facet_pivot_mincount=None, dismax=None,
+               limit_to_registered_models=None, result_class=None, **kwargs):
+        
         if len(query_string) == 0:
             return {
                 'results': [],
@@ -162,6 +163,11 @@ class SearchBackend(BaseSearchBackend):
         if facet_limit is not None:
             kwargs['facet'] = 'on'
             kwargs['facet.limit'] = facet_limit
+            
+        if facet_field_limit is not None:
+            kwargs['facet'] = 'on'
+            for f, limit in facet_field_limit.iteritems():
+                kwargs['f.%s.facet.limit' % f] = limit
         
         if facet_prefix is not None:
             kwargs['facet'] = 'on'
@@ -190,6 +196,14 @@ class SearchBackend(BaseSearchBackend):
         if query_facets is not None:
             kwargs['facet'] = 'on'
             kwargs['facet.query'] = ["%s:%s" % (field, value) for field, value in query_facets]
+            
+        if pivot_facets is not None:
+            kwargs['facet'] = 'on'
+            kwargs['facet.pivot'] = pivot_facets
+            
+        if facet_pivot_mincount is not None:
+            kwargs['facet'] = 'on'
+            kwargs['facet.pivot_mincount'] = facet_pivot_mincount
         
         if limit_to_registered_models is None:
             limit_to_registered_models = getattr(settings, 'HAYSTACK_LIMIT_TO_REGISTERED_MODELS', True)
@@ -285,12 +299,13 @@ class SearchBackend(BaseSearchBackend):
         
         if result_class is None:
             result_class = SearchResult
-        
+            
         if hasattr(raw_results, 'facets'):
             facets = {
                 'fields': raw_results.facets.get('facet_fields', {}),
                 'dates': raw_results.facets.get('facet_dates', {}),
                 'queries': raw_results.facets.get('facet_queries', {}),
+                'pivots': raw_results.facets.get('facet_pivot', {}),
             }
             
             for key in ['fields']:
@@ -298,7 +313,22 @@ class SearchBackend(BaseSearchBackend):
                     # Convert to a two-tuple, as Solr's json format returns a list of
                     # pairs.
                     facets[key][facet_field] = zip(facets[key][facet_field][::2], facets[key][facet_field][1::2])
-        
+                    
+            def _process_pivot(pivot):
+                facet = []
+                for p in pivot:
+                    if not 'pivot' in p:
+                        facet.append((str(p['value']), p['count'], ()))
+                    else:
+                        facet.append((str(p['value']), p['count'], tuple(_process_pivot(p['pivot']))))
+                
+                return facet
+                    
+            for key in ['pivots']:
+                for facet_pivot in facets[key]:
+                    # Convert to a three-tuple, with pairs + nested pivot
+                    facets[key][facet_pivot] = _process_pivot(facets[key][facet_pivot])
+                    
         if getattr(settings, 'HAYSTACK_INCLUDE_SPELLING', False) is True:
             if hasattr(raw_results, 'spellcheck'):
                 if len(raw_results.spellcheck.get('suggestions', [])):
@@ -459,6 +489,27 @@ class SearchQuery(BaseSearchQuery):
         
         return result
     
+    def build_facet_field(self, facet, key, ex):
+        f_mask = ''
+        tok = []
+        if key or ex:
+            f_mask += '{!'
+        if key:
+            f_mask += 'key=%s'
+            tok.append(key)
+        if ex:
+            if key:
+                f_mask += ' ' 
+            f_mask += 'ex=%s'
+            tok.append(ex)
+        if key or ex:
+            f_mask += '}'
+        f_mask += facet
+        if len(tok) > 0:
+            facet = f_mask % tuple(tok)
+
+        return facet
+    
     def run(self, spelling_query=None):
         """Builds and executes the query. Returns a list of search results."""
         final_query = self.build_query()
@@ -487,28 +538,8 @@ class SearchQuery(BaseSearchQuery):
         if self.facets:
             facets = []
             for facet, key, ex in list(self.facets):
-                if not facet:
-                    continue
-                
-                f_mask = ''
-                tok = []
-                if key or ex:
-                    f_mask += '{!'
-                if key:
-                    f_mask += 'key=%s'
-                    tok.append(key)
-                if ex:
-                    if key:
-                        f_mask += ' ' 
-                    f_mask += 'ex=%s'
-                    tok.append(ex)
-                if key or ex:
-                    f_mask += '}'
-                f_mask += facet
-                if len(tok) > 0:
-                    facet = f_mask % tuple(tok)
-                facets.append(facet)
-
+                if facet:
+                    facets.append(self.build_facet_field(facet, key, ex))
             kwargs['facets'] = facets
         
         if self.date_facets:
@@ -520,14 +551,27 @@ class SearchQuery(BaseSearchQuery):
         if self.facet_limit:
             kwargs['facet_limit'] = self.facet_limit
         
+        if self.facet_field_limit:
+            kwargs['facet_field_limit'] = self.facet_field_limit
+        
         if self.facet_prefix:
             kwargs['facet_prefix'] = self.facet_prefix
 
         if self.facet_sort:
             kwargs['facet_sort'] = self.facet_sort
+            
+        if self.facet_pivot_mincount:
+            kwargs['facet_mincount'] = self.facet_mincount
         
         if self.query_facets:
             kwargs['query_facets'] = self.query_facets
+            
+        if self.pivot_facets:
+            facets = []
+            for facet, key, ex in list(self.pivot_facets):
+                if facet:
+                    facets.append(self.build_facet_field(facet, key, ex))
+            kwargs['pivot_facets'] = facets
         
         if self.narrow_queries:
             narrow_queries = []
@@ -573,10 +617,50 @@ class SearchQuery(BaseSearchQuery):
         facet_field = self.backend.site.get_facet_field_name(field)
         self.facets.add((facet_field, key, ','.join(ex)))
         
-    def add_narrow_query(self, query, tag=None):
+    def add_narrow_query(self, query, tag=[]):
         """
         Narrows a search to a subset of all documents per the query.
         
         Generally used in conjunction with faceting.
         """
-        self.narrow_queries.add((query, tag))
+        self.narrow_queries.add((query, ','.join(tag)))
+        
+    def add_pivot_facet(self, *args, **kwargs):
+        """Adds pivot faceting to a query for the provided fields."""
+        key = kwargs.get('key', None)
+        ex = kwargs.get('ex', [])
+        facet_fields = []
+        for field in args:
+            facet_fields.append(self.backend.site.get_facet_field_name(field))
+        self.pivot_facets.add((','.join(facet_fields), key, ','.join(ex)))
+        
+    def post_process_facets(self, results):
+        # Handle renaming the facet fields. Undecorate and all that.
+        revised_facets = {}
+        field_data = self.backend.site.all_searchfields()
+        
+        for facet_type, field_details in results.get('facets', {}).items():
+            temp_facets = {}
+            
+            for field, field_facets in field_details.items():
+                fieldname = []
+                
+                if facet_type in ['pivots']:
+                    field = field.split(',')
+                else:
+                    field = [field]
+                
+                for f in field:
+                    if f in field_data and hasattr(field_data[f], 'get_facet_for_name'):
+                        fieldname.append(field_data[f].get_facet_for_name())
+                
+                if len(fieldname) == 0:
+                    fieldname = field[0]
+                else:
+                    fieldname = ','.join(fieldname)
+                    
+                temp_facets[fieldname] = field_facets
+            
+            revised_facets[facet_type] = temp_facets
+        
+        return revised_facets
