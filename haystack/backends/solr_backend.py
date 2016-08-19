@@ -561,7 +561,7 @@ class SearchQuery(BaseSearchQuery):
             kwargs['facet_sort'] = self.facet_sort
             
         if self.facet_pivot_mincount:
-            kwargs['facet_mincount'] = self.facet_mincount
+            kwargs['facet_pivot_mincount'] = self.facet_pivot_mincount
         
         if self.query_facets:
             kwargs['query_facets'] = self.query_facets

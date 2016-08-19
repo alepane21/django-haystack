@@ -378,7 +378,7 @@ class SearchQuerySet(object):
     def facet_pivot_mincount(self, mincount):
         """Sets mincount for pivot facet result"""
         clone = self._clone()
-        clone.query.set_facet_mincount(mincount)
+        clone.query.set_facet_pivot_mincount(mincount)
         return clone
     
     def narrow(self, query, **kwargs):
